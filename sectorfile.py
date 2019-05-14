@@ -189,28 +189,16 @@ class sectorfileobj:
             # We only really care about certain ones though
             if currsec in ["sid", "star"]:
                 # Search for the headers in parens
-                reparen = re.search(r"^(\(.+\))", line)
-                # Search for the headers in equals
-                reeq = re.search(r"^=+([^=]+)=+", line)
+                resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
                 # If either of these matches, start a new section
-                if reparen is not None:
-                    subsec = reparen[1]  # Get name of subsection
+                if resub is not None:
+                    subsec = resub[1]  # Get name of subsection
                     if currsec == "sid":
                         self.sidsubs.append(subsec)
                     elif currsec == "star":
                         self.starsubs.append(subsec)
                     # print("New subsec: "+subsec)
                     self.subsecs[currsec][subsec] = line  # Add the header line to it
-                elif reeq is not None:
-                    subsec = reeq[1]
-                    if currsec == "sid":
-                        self.sidsubs.append(subsec)
-                    elif currsec == "star":
-                        self.starsubs.append(subsec)
-                    # print("New subsec: "+subsec)
-                    self.subsecs[currsec][subsec] = line
-                # for key,sub in subsecs.items():
-                    # print(sub)
                 elif subsec != "":  # if no new section but we are in one
                     # print("Adding to "+currsec+" -> "+subsec)
                     self.subsecs[currsec][subsec] += line
@@ -219,7 +207,7 @@ class sectorfileobj:
                 subsec = ""  # Just in case
                 sections[currsec] += line
         # Add sections for the new diagrams
-        aptsubi = self.sidsubs.index("(Airports)")
+        aptsubi = self.sidsubs.index("Airports")
         fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
         cdsec = "(Current Diagrams)"
         refsec = "(Old Diagram REF)"
