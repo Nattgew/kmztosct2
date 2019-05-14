@@ -393,8 +393,7 @@ class sectorfileobj:
                     newsct.write("[SID]\n")
                     # Go through the subsections
                     for sub in self.sidsubs:
-                        for subcon in self.subsecs["sid"][sub]:
-                            newsct.write(subcon)
+                        newsct.write(self.subsecs["sid"][sub])
                 elif key == "labels":
                     newsct.write(contents)
                 else:  # Business as usual
