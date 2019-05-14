@@ -125,27 +125,40 @@ class sectorfileobj:
         subsec = ''
         secfilepath = self.directory / self.masterfilename
         # Open sector file and iterate through the lines
-        f = open(secfilepath, 'r')
-        for line in f:
-            # Build the airport coordinates dictionary
-            # This is used to exclude labels around airports with new ones
-            if currsec == "airport":  # do this first so we skip the header line
-                # WY67 000.000 N041.47.21.809 W110.32.30.609
-                # Split by spaces, remove blanks/newline
-                elems = [i for i in line.strip().split(' ') if i != '']
-                # print(elems)
-                # 0 for empty line, 1 for next header
-                # Could test only for >3 but would like to investigate if it's in between
-                if len(elems) > 1:
-                    # Convert to decimal degrees
-                    dcoords = dmstodd([elems[2], elems[3]])
-                    # Add airport and coords to dict
-                    self.airportcoords[elems[0]] = dcoords
-            elif currsec == "regions":
-                if re.search(r'^[ \t]+N\d{3}', line) is None:
+        with open(secfilepath, 'r') as f:
+            for line in f:
+                # Build the airport coordinates dictionary
+                # This is used to exclude labels around airports with new ones
+                if currsec == "airport":  # do this first so we skip the header line
+                    # WY67 000.000 N041.47.21.809 W110.32.30.609
+                    # Split by spaces, remove blanks/newline
+                    elems = [i for i in line.strip().split(' ') if i != '']
+                    # print(elems)
+                    # 0 for empty line, 1 for next header
+                    # Could test only for >3 but would like to investigate if it's in between
+                    if len(elems) > 1:
+                        # Convert to decimal degrees
+                        dcoords = dmstodd([elems[2], elems[3]])
+                        # Add airport and coords to dict
+                        self.airportcoords[elems[0]] = dcoords
+                elif currsec == "regions":
+                    if re.search(r'^[ \t]+N\d{3}', line) is None:
+                        elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
+                        if len(elems) > 2:
+                            color = elems[0].lower()
+                            if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
+                                if color not in self.usedcolors:
+                                    self.usedcolors.append(color)
+                            else:
+                                print(elems)
+                                print("Color not found: "+color)
+                                # for i in range(5):
+                                #     print(str(i)+": "+elems[i])
+                else:
                     elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
-                    if len(elems) > 2:
-                        color = elems[0].lower()
+                    # Add colors to used colors list
+                    if len(elems) > 4 and re.search(r'^N\d{3}', elems[0]) is not None:
+                        color = elems[4].lower()
                         if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
                             if color not in self.usedcolors:
                                 self.usedcolors.append(color)
@@ -154,58 +167,45 @@ class sectorfileobj:
                             print("Color not found: "+color)
                             # for i in range(5):
                             #     print(str(i)+": "+elems[i])
-            else:
-                elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
-                # Add colors to used colors list
-                if len(elems) > 4 and re.search(r'^N\d{3}', elems[0]) is not None:
-                    color = elems[4].lower()
-                    if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                    else:
-                        print(elems)
-                        print("Color not found: "+color)
-                        # for i in range(5):
-                        #     print(str(i)+": "+elems[i])
-            # See if we've made it to the colors section
-            # These colors aren't used right now as they're applied from the main list as used
-            if re.search("^#define", line) is not None:
-                currsec = "colors"
-                # elems=[i for i in line.strip().split(' ') if i!='']
-                # #print(elems)
-                # if len(elems)>2:
-                #     colordict[elems[1]]=[elems[2],0]
-            # Otherwise we're in the thick of it, see if we're starting a new section
-            elif currsec != "headers":
-                for key in sections.keys():
-                    # see if the line is [SECTION]
-                    if re.search(r"^\["+key.upper()+r"\]", line) is not None:
-                        currsec = key
-                        # If we just switched from SID to STAR, we need to blank this out until we get the next one
-                        subsec = ""
-                        break
-            # Break SID and STAR down into subsections
-            # TODO: Search for actual headers, not just ( and =
-            # We only really care about certain ones though
-            if currsec in ["sid", "star"]:
-                # Search for the headers in parens
-                resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
-                # If either of these matches, start a new section
-                if resub is not None:
-                    subsec = resub[1]  # Get name of subsection
-                    if currsec == "sid":
-                        self.sidsubs.append(subsec)
-                    elif currsec == "star":
-                        self.starsubs.append(subsec)
-                    # print("New subsec: "+subsec)
-                    self.subsecs[currsec][subsec] = line  # Add the header line to it
-                elif subsec != "":  # if no new section but we are in one
-                    # print("Adding to "+currsec+" -> "+subsec)
-                    self.subsecs[currsec][subsec] += line
-                sections[currsec] += line  # write to the main list too
-            else:  # Any other random line
-                subsec = ""  # Just in case
-                sections[currsec] += line
+                # See if we've made it to the colors section
+                # These colors aren't used right now as they're applied from the main list as used
+                if re.search("^#define", line) is not None:
+                    currsec = "colors"
+                    # elems=[i for i in line.strip().split(' ') if i!='']
+                    # #print(elems)
+                    # if len(elems)>2:
+                    #     colordict[elems[1]]=[elems[2],0]
+                # Otherwise we're in the thick of it, see if we're starting a new section
+                elif currsec != "headers":
+                    for key in sections.keys():
+                        # see if the line is [SECTION]
+                        if re.search(r"^\["+key.upper()+r"\]", line) is not None:
+                            currsec = key
+                            # If we just switched from SID to STAR, we need to blank this out until we get the next one
+                            subsec = ""
+                            break
+                # Break SID and STAR down into subsections
+                # TODO: Search for actual headers, not just ( and =
+                # We only really care about certain ones though
+                if currsec in ["sid", "star"]:
+                    # Search for the headers in parens
+                    resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
+                    # If either of these matches, start a new section
+                    if resub is not None:
+                        subsec = resub[1]  # Get name of subsection
+                        if currsec == "sid":
+                            self.sidsubs.append(subsec)
+                        elif currsec == "star":
+                            self.starsubs.append(subsec)
+                        # print("New subsec: "+subsec)
+                        self.subsecs[currsec][subsec] = line  # Add the header line to it
+                    elif subsec != "":  # if no new section but we are in one
+                        # print("Adding to "+currsec+" -> "+subsec)
+                        self.subsecs[currsec][subsec] += line
+                    sections[currsec] += line  # write to the main list too
+                else:  # Any other random line
+                    subsec = ""  # Just in case
+                    sections[currsec] += line
         # Add sections for the new diagrams
         aptsubi = self.sidsubs.index("Airports")
         fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
