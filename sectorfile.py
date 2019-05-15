@@ -83,15 +83,21 @@ class sectorfileobj:
     # Get dictionary of colors
     deccolors = vrccolors.getcolors()
 
-    def __init__(self, filename, directory, airac, modver):
+    def __init__(self, filename, directory, airac, modver=''):
         # Sector code is first 3 of file name
         self.sector = filename[:3]
+        # Just the file name
         self.basename = filename
+        # Directory containing the file
         self.directory = Path(directory)
+        # Version info
         self.airac = airac
         self.modver = modver
+        # Name of original file
         self.masterfilename = filename+"_"+self.airac+".sct2"
+        # Name of modified file to be saved
         self.filename = filename+"_"+self.airac+self.modver+".sct2"
+        # List of airports in this sector
         self.airports = self.initairports()
         # Every ICAO key will correspond to coordinates from the AIRPORT section
         # This is used to exclude existing labels for airports that have new labels defined
@@ -103,6 +109,8 @@ class sectorfileobj:
         self.sidsubs = []
         self.starsubs = []
         self.subsecs = {"sid": {}, "star": {}}
+        self.re_coord = re.compile(r'^[NS]\d{3}')
+        self.re_deccolor = re.compile(r'^\d{,8}$')
         self.sections = self.getsections()
 
     def initairports(self):
@@ -113,13 +121,27 @@ class sectorfileobj:
             # Only pick out new airports in this sector
             airports = [apt for apt, asector in self.aptsectors.items() if asector == self.sector]
         return airports
+    
+    def usedcolor(self, color):
+        # Add new color to list of used colors
+        if color in self.deccolors or re_deccolor.search(color) is not None:
+            if color not in self.usedcolors:
+                self.usedcolors.append(color)
+        else:  # Warn if color is not defined
+            print(elems)
+            print("Color not found: "+color)
+            # for i in range(5):
+            #     print(str(i)+": "+elems[i])
 
     def getsections(self):
-        sections = {}
         # Reads file into sections
         # Start with laying out the sct2 sections
+        sections = {}
+        kres = {}
         for key in self.stdsections:
             sections[key] = ""
+            skey = "["+key.upper()+"]"
+            kres[key] = [skey, len(skey)]
         # Track which section we're in
         currsec = "header"
         subsec = ''
@@ -138,186 +160,181 @@ class sectorfileobj:
                     # Could test only for >3 but would like to investigate if it's in between
                     if len(elems) > 1:
                         # Convert to decimal degrees
-                        dcoords = dmstodd([elems[2], elems[3]])
                         # Add airport and coords to dict
-                        self.airportcoords[elems[0]] = dcoords
+                        self.airportcoords[elems[0]] = dmstodd([elems[2], elems[3]])
+                # Add colors to used colors list
+                # Start with regions section as it's unique
                 elif currsec == "regions":
-                    if re.search(r'^[ \t]+N\d{3}', line) is None:
-                        elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
+                    if self.re_coord.search(line) is None:
+                        elems = [i for i in line.split(';')[0].strip().split(' ') if i != '']
                         if len(elems) > 2:
-                            color = elems[0].lower()
-                            if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
-                                if color not in self.usedcolors:
-                                    self.usedcolors.append(color)
-                            else:
-                                print(elems)
-                                print("Color not found: "+color)
-                                # for i in range(5):
-                                #     print(str(i)+": "+elems[i])
+                            self.usedcolor(elems[0].lower())
+                # Handle other sections
                 else:
-                    elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
+                    elems = [i for i in line.split(';')[0].strip().split(' ') if i != '']
                     # Add colors to used colors list
-                    if len(elems) > 4 and re.search(r'^N\d{3}', elems[0]) is not None:
-                        color = elems[4].lower()
-                        if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
-                            if color not in self.usedcolors:
-                                self.usedcolors.append(color)
-                        else:
-                            print(elems)
-                            print("Color not found: "+color)
-                            # for i in range(5):
-                            #     print(str(i)+": "+elems[i])
+                    if len(elems) > 4 and self.re_coord.search(elems[0]) is not None:
+                        self.usedcolor(elems[4].lower())
+
                 # See if we've made it to the colors section
                 # These colors aren't used right now as they're applied from the main list as used
-                if re.search("^#define", line) is not None:
+                if if line[:7] == "#define":
                     currsec = "colors"
                     # elems=[i for i in line.strip().split(' ') if i!='']
                     # #print(elems)
-                    # if len(elems)>2:
-                    #     colordict[elems[1]]=[elems[2],0]
                 # Otherwise we're in the thick of it, see if we're starting a new section
                 elif currsec != "headers":
                     for key in sections.keys():
                         # see if the line is [SECTION]
-                        if re.search(r"^\["+key.upper()+r"\]", line) is not None:
+                        #if re.search(r"^\["+key.upper()+r"\]", line) is not None:
+                        if line[:kres[key][1]] == kres[key][0]:
                             currsec = key
                             # If we just switched from SID to STAR, we need to blank this out until we get the next one
                             subsec = ""
                             break
+
                 # Break SID and STAR down into subsections
                 # TODO: Search for actual headers, not just ( and =
                 # We only really care about certain ones though
                 if currsec in ["sid", "star"]:
-                    # Search for the headers in parens
-                    resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
+                    # Search for the headers in () or ==
+                    # resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
                     # If either of these matches, start a new section
-                    if resub is not None:
-                        subsec = resub[1]  # Get name of subsection
+                    # if resub is not None:
+                    ochar = line[:1]
+                    if ochar != " " and ochar != ";" and ochar !="\n":
+                        # subsec = resub[1]  # Get name of subsection
+                        subsec = line[:26].strip()
                         if currsec == "sid":
                             self.sidsubs.append(subsec)
                         elif currsec == "star":
                             self.starsubs.append(subsec)
                         # print("New subsec: "+subsec)
                         self.subsecs[currsec][subsec] = line  # Add the header line to it
-                    elif subsec != "":  # if no new section but we are in one
+                    elif subsec:  # if no new section but we are in one
                         # print("Adding to "+currsec+" -> "+subsec)
                         self.subsecs[currsec][subsec] += line
                     sections[currsec] += line  # write to the main list too
                 else:  # Any other random line
                     subsec = ""  # Just in case
                     sections[currsec] += line
-        # Add sections for the new diagrams
+
+        # Finally, add sections for the new diagrams
+        # First find index of Airports section in the list of SID subsections
         aptsubi = self.sidsubs.index("Airports")
+        # VRC wants this at the end of header lines
         fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
+        # Section for new diagrams
         cdsec = "(Current Diagrams)"
+        # Section for old reference items
         refsec = "(Old Diagram REF)"
+        # Create full header lines
+        # Header name is first 26 characters
         currhdr = "\n"+cdsec.ljust(27)+fakecoords
         refhdr = "\n"+refsec.ljust(27)+fakecoords
+        # Insert these sections into to the subsection list before Airports
         self.sidsubs.insert(aptsubi+1, refsec)
         self.sidsubs.insert(aptsubi+1, cdsec)
+        # Initialize these subsections with the headers
+        # addnewdiagrams() will put new content here
         self.subsecs["sid"][cdsec] = currhdr
         self.subsecs["sid"][refsec] = refhdr
         return sections
+        
+    def coordlisttolines(self, coordlist, color):
+        # Convert a list of coordinates to lines
+        # Each lines starts with end point of previous line
+        # Keep last coord to tie lines together
+        # print("New coords list")
+        lastcoord = ""
+        for line in coordlist:
+            # Get DMS of these coordinates
+            thiscoord = ddtodms(line[0], line[1])
+            # Skip first point so we can get next one too
+            if lastcoord:
+                if color in self.deccolors.keys():
+                    line = "%s %s %s" % (lastcoord, thiscoord, color)
+                    yield " "+line+"\n"
+                    # print(line)
+                else:
+                    print("  Color not found: "+color)
+            lastcoord = thiscoord
 
     def addnewdiagrams(self, newlayouts):
+        # List of airports with new labels
+        # Old labels will be pruned out there
         newaptlbls = []
+        # New section content with labels
         newlabels = ""
+        # New section content with new diagram lines
         newlines = ""
+        # New section content with old diagram reference lines
         newreflines = ""
         # print(newlayouts)
-        for apt, diag in newlayouts.items():
-            if apt in self.airports:
-                if diag.apdlines != {}:
-                    newaptlbls.append(apt)
-                    newlines += ";"+apt+"\n"
-                    # print(";"+airport)
-                    for color, coords in diag.apdlines.items():
-                        # print("COLOR: "+color)
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                        for coordlist in coords:
-                            # print("Coord: "+str(coordlist[0])+" "+str(coordlist[1]))
-                            # Keep last coord to tie lines together
-                            lastcoord = ""
-                            for line in coordlist:
-                                cstr = ddtodms(line[0], line[1])
-                                # Skip first point so we can get next one too
-                                if lastcoord != "":
-                                    if color in self.deccolors.keys():  # or color in colordict.keys():
-                                        # if color in colordict:
-                                        #     colordict[color][1]=1
-                                        line = "%s %s %s" % (lastcoord, cstr, color)
-                                        newlines += " "+line+"\n"
-                                        # print(line)
-                                    else:
-                                        print("  Color not found at "+apt+": "+color)
-                                lastcoord = cstr
-                if diag.labels != {}:
-                    newlabels += "\n;"+apt+"\n"
-                    # print(";"+airport)
-                    for color, lbls in diag.labels.items():
-                        # print(color)
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                        for point in lbls:
-                            if color in self.deccolors.keys():  # or color in colordict.keys():
-                                # print(point)
-                                #  if color in colordict:
-                                #     colordict[color][1]=1
-                                cstr = ddtodms(point[1], point[2])
-                                newlabels += '"'+point[0]+'" '+cstr+" "+color+"\n"
-                                # print(' "'+point[0]+'" '+cstr)
-                            else:
-                                print("  Color not found at "+apt+": "+color)
-                if diag.reflines != {}:
-                    newreflines += "\n;"+apt+" - REF\n"
-                    # print("Adding ref lines for: "+apt)
-                    # print(";"+airport)
-                    for color, coords in diag.reflines.items():
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                        # print("COLOR: "+color)
-                        for coordlist in coords:
-                            # Keep last coord to tie lines together
-                            # print("New coords list")
-                            lastcoord = ""
-                            for line in coordlist:
-                                # print("Coord: "+str(line[0])+" "+str(line[1]))
-                                cstr = ddtodms(line[0], line[1])
-                                # Skip first point so we can get next one too
-                                if lastcoord != "":
-                                    if color in self.deccolors.keys():  # or color in colordict.keys():
-                                        # if color in colordict:
-                                        #     colordict[color][1]=1
-                                        line = "%s %s %s" % (lastcoord, cstr, color)
-                                        newreflines += " "+line+"\n"
-                                        # print(line)
-                                    else:
-                                        print("  Color not found at "+apt+": "+color)
-                                lastcoord = cstr
-                # else:
-                    # print("No ref lines for: "+apt)
+        for apt, diag in {apt: diag for apt, diag in newlayouts.items() if apt in self.airports}:
+            if diag.apdlines:
+                newlines += ";"+apt+"\n"
+                # print(";"+airport)
+                for color, coords in diag.apdlines.items():
+                    # print("COLOR: "+color)
+                    if color not in self.usedcolors:
+                        self.usedcolors.append(color)
+                    for coordlist in coords:
+                        for line in coordlisttolines(coordlist, color):
+                            newlines += line
+            if diag.labels:
+                newaptlbls.append(apt)
+                newlabels += "\n;"+apt+"\n"
+                # print(";"+airport)
+                for color, lbls in diag.labels.items():
+                    # print(color)
+                    if color not in self.usedcolors:
+                        self.usedcolors.append(color)
+                    for point in lbls:
+                        if color in self.deccolors.keys():
+                            # print(point)
+                            cstr = ddtodms(point[1], point[2])
+                            newlabels += '"'+point[0]+'" '+cstr+" "+color+"\n"
+                            # print(' "'+point[0]+'" '+cstr)
+                        else:
+                            print("  Color not found at "+apt+": "+color)
+            if diag.reflines:
+                newreflines += "\n;"+apt+" - REF\n"
+                # print("Adding ref lines for: "+apt)
+                # print(";"+airport)
+                for color, coords in diag.reflines.items():
+                    if color not in self.usedcolors:
+                        self.usedcolors.append(color)
+                    # print("COLOR: "+color)
+                    for coordlist in coords:
+                        for line in coordlisttolines(coordlist, color):
+                            newreflines += line
+            # else:
+                # print("No ref lines for: "+apt)
+        # Add the new content to applicable sections
         self.subsecs["sid"]["(Current Diagrams)"] += "\n"+newlines
         self.subsecs["sid"]["(Old Diagram REF)"] += "\n"+newreflines
+        # First remove labels where we have new ones
         self.prunelabels(newaptlbls)
+        # Add new labels to remaining ones
         self.sections["labels"] += "\n"+newlabels
 
     def prunelabels(self, newlabels):
-        # Don't keep labels around airports we have new labels for
+        # Don't keep existing labels around airports we have new labels for
         # String to hold the lines we keep
         keptlines = ""
         # Print out the names and locations of airports to prune, mostly for debug
-        for newapt in newlabels:
-            coords = self.airportcoords[newapt]
-            print("  Will prune for %s: %f,%f" % (newapt, coords[0], coords[1]))
+        # for newapt in newlabels:
+            # coords = self.airportcoords[newapt]
+            # print("  Will prune for %s: %f,%f" % (newapt, coords[0], coords[1]))
         # Actually prune all labels lines
+        re_lbl = re.compile('^".+" +[NS]')
         for line in self.sections["labels"].split('\n'):
             # reicao=re.search("^;.+K[A-Z0-9]{3}",line)
             # if reicao is not None:
             #   print("Found airport labels for: "+line)
             # See if line looks like a label
-            relbl = re.search('^".+" +[NS]', line)
-            if relbl is not None:
+            if re_lbl.search(line) is not None:
                 # print("Found label: "+line)
                 # Split by spaces and remove spaces/newline
                 lblpre = [i for i in line.strip().split('"') if i != '']
@@ -329,14 +346,7 @@ class sectorfileobj:
                 # Convert coords to decimal
                 # print(lblelems)
                 prune = 0
-                if len(lblelems) > 1:
-                    color = lblelems[3].lower()
-                    if color in self.deccolors or re.search(r'^\d{,8}$', color) is not None:
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                    else:
-                        print(lblelems)
-                        print("Color not found: "+color)
+                if len(lblelems) > 2:
                     lblcoords = dmstodd((lblelems[1], lblelems[2]))
                     # Check against new airports
                     for newapt in newlabels:
@@ -359,6 +369,8 @@ class sectorfileobj:
                 # elems=[i for i in line.strip().split(' ') if i!='']
                 if not prune:
                     keptlines += line+"\n"  # Keep anything not pruned
+                    if len(lblelems) > 3:
+                        self.usedcolor(lblelems[3].lower())
         # Rewrite labels section to just be the lines we kept
         self.sections["labels"] = "[LABELS]\n"+keptlines
 
@@ -405,14 +417,8 @@ class sectorfileobj:
 def ddtodms(lat, lon):
     # Convert decimal degrees to the sct2 format of [NSEW]DDD.MM.SS.SSS
     # First get the NSEW directions
-    if lat > 0:
-        latdir = "N"
-    else:
-        latdir = "S"
-    if lon > 0:
-        londir = "E"
-    else:
-        londir = "W"
+    latdir = "N" if lat > 0 else "S"
+    londir = "E" if lon > 0 else "W"
     # Take out any negatives
     lat = abs(lat)
     lon = abs(lon)
@@ -434,8 +440,10 @@ def ddtodms(lat, lon):
 
 
 def cosinedist(coord1, coord2):  # Use cosine to find distance between coordinates
+    # Split into lat/lon
     lat1, lon1 = coord1
     lat2, lon2 = coord2
+    # Convert latitudes to radians, get difference
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
     dellamb = math.radians(lon2-lon1)
