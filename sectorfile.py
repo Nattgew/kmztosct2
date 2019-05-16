@@ -121,14 +121,13 @@ class sectorfileobj:
             # Only pick out new airports in this sector
             airports = [apt for apt, asector in self.aptsectors.items() if asector == self.sector]
         return airports
-    
+
     def usedcolor(self, color):
         # Add new color to list of used colors
-        if color in self.deccolors or re_deccolor.search(color) is not None:
+        if color in self.deccolors or self.re_deccolor.search(color) is not None:
             if color not in self.usedcolors:
                 self.usedcolors.append(color)
         else:  # Warn if color is not defined
-            print(elems)
             print("Color not found: "+color)
             # for i in range(5):
             #     print(str(i)+": "+elems[i])
@@ -178,7 +177,7 @@ class sectorfileobj:
 
                 # See if we've made it to the colors section
                 # These colors aren't used right now as they're applied from the main list as used
-                if if line[:7] == "#define":
+                if line[:7] == "#define":
                     currsec = "colors"
                     # elems=[i for i in line.strip().split(' ') if i!='']
                     # #print(elems)
@@ -186,9 +185,10 @@ class sectorfileobj:
                 elif currsec != "headers":
                     for key in sections.keys():
                         # see if the line is [SECTION]
-                        #if re.search(r"^\["+key.upper()+r"\]", line) is not None:
+                        # if re.search(r"^\["+key.upper()+r"\]", line) is not None:
                         if line[:kres[key][1]] == kres[key][0]:
                             currsec = key
+                            # print("Entered section: "+key)
                             # If we just switched from SID to STAR, we need to blank this out until we get the next one
                             subsec = ""
                             break
@@ -202,7 +202,7 @@ class sectorfileobj:
                     # If either of these matches, start a new section
                     # if resub is not None:
                     ochar = line[:1]
-                    if ochar != " " and ochar != ";" and ochar !="\n":
+                    if ochar != " " and ochar != ";" and ochar != "\n":
                         # subsec = resub[1]  # Get name of subsection
                         subsec = line[:26].strip()
                         if currsec == "sid":
@@ -221,7 +221,7 @@ class sectorfileobj:
 
         # Finally, add sections for the new diagrams
         # First find index of Airports section in the list of SID subsections
-        aptsubi = self.sidsubs.index("Airports")
+        aptsubi = self.sidsubs.index("(Airports)")
         # VRC wants this at the end of header lines
         fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
         # Section for new diagrams
@@ -240,7 +240,7 @@ class sectorfileobj:
         self.subsecs["sid"][cdsec] = currhdr
         self.subsecs["sid"][refsec] = refhdr
         return sections
-        
+
     def coordlisttolines(self, coordlist, color):
         # Convert a list of coordinates to lines
         # Each lines starts with end point of previous line
@@ -271,7 +271,8 @@ class sectorfileobj:
         # New section content with old diagram reference lines
         newreflines = ""
         # print(newlayouts)
-        for apt, diag in {apt: diag for apt, diag in newlayouts.items() if apt in self.airports}:
+        # print(newlayouts)
+        for apt, diag in {apt: diag for apt, diag in newlayouts.items() if apt in self.airports}.items():
             if diag.apdlines:
                 newlines += ";"+apt+"\n"
                 # print(";"+airport)
@@ -280,7 +281,7 @@ class sectorfileobj:
                     if color not in self.usedcolors:
                         self.usedcolors.append(color)
                     for coordlist in coords:
-                        for line in coordlisttolines(coordlist, color):
+                        for line in self.coordlisttolines(coordlist, color):
                             newlines += line
             if diag.labels:
                 newaptlbls.append(apt)
@@ -307,7 +308,7 @@ class sectorfileobj:
                         self.usedcolors.append(color)
                     # print("COLOR: "+color)
                     for coordlist in coords:
-                        for line in coordlisttolines(coordlist, color):
+                        for line in self.coordlisttolines(coordlist, color):
                             newreflines += line
             # else:
                 # print("No ref lines for: "+apt)
@@ -325,8 +326,8 @@ class sectorfileobj:
         keptlines = ""
         # Print out the names and locations of airports to prune, mostly for debug
         # for newapt in newlabels:
-            # coords = self.airportcoords[newapt]
-            # print("  Will prune for %s: %f,%f" % (newapt, coords[0], coords[1]))
+        #   coords = self.airportcoords[newapt]
+        #   print("  Will prune for %s: %f,%f" % (newapt, coords[0], coords[1]))
         # Actually prune all labels lines
         re_lbl = re.compile('^".+" +[NS]')
         for line in self.sections["labels"].split('\n'):
