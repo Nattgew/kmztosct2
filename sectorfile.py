@@ -138,7 +138,7 @@ class sectorfileobj:
         sections = {}
         kres = {}
         for key in self.stdsections:
-            sections[key] = ""
+            sections[key] = []
             skey = "["+key.upper()+"]"
             kres[key] = [skey, len(skey)]
         # Track which section we're in
@@ -148,14 +148,14 @@ class sectorfileobj:
         # Open sector file and iterate through the lines
         with open(secfilepath, 'r') as f:
             for line in f:
+                line = line.rstrip()
                 # Build the airport coordinates dictionary
                 # This is used to exclude labels around airports with new ones
                 if currsec == "airport":  # do this first so we skip the header line
                     # WY67 000.000 N041.47.21.809 W110.32.30.609
                     # Split by spaces, remove blanks/newline
-                    elems = [i for i in line.strip().split(' ') if i != '']
-                    # print(elems)
-                    # 0 for empty line, 1 for next header
+                    elems = [i for i in line.split(' ') if i]
+                    # length 0 for empty line, 1 for next header
                     # Could test only for >3 but would like to investigate if it's in between
                     if len(elems) > 1:
                         # Convert to decimal degrees
@@ -165,12 +165,12 @@ class sectorfileobj:
                 # Start with regions section as it's unique
                 elif currsec == "regions":
                     if self.re_coord.search(line) is None:
-                        elems = [i for i in line.split(';')[0].strip().split(' ') if i != '']
+                        elems = [i for i in line.split(';')[0].split(' ') if i]
                         if len(elems) > 2:
                             self.usedcolor(elems[0].lower())
                 # Handle other sections
                 else:
-                    elems = [i for i in line.split(';')[0].strip().split(' ') if i != '']
+                    elems = [i for i in line.split(';')[0].split(' ') if i]
                     # Add colors to used colors list
                     if len(elems) > 4 and self.re_coord.search(elems[0]) is not None:
                         self.usedcolor(elems[4].lower())
@@ -179,13 +179,12 @@ class sectorfileobj:
                 # These colors aren't used right now as they're applied from the main list as used
                 if line[:7] == "#define":
                     currsec = "colors"
-                    # elems=[i for i in line.strip().split(' ') if i!='']
-                    # #print(elems)
+                    # elems=[i for i in line.split(' ') if i]
+                    # print(elems)
                 # Otherwise we're in the thick of it, see if we're starting a new section
-                elif currsec != "headers":
+                elif currsec != "headers" and line[:1] == "[":
                     for key in sections.keys():
                         # see if the line is [SECTION]
-                        # if re.search(r"^\["+key.upper()+r"\]", line) is not None:
                         if line[:kres[key][1]] == kres[key][0]:
                             currsec = key
                             # print("Entered section: "+key)
@@ -194,30 +193,25 @@ class sectorfileobj:
                             break
 
                 # Break SID and STAR down into subsections
-                # TODO: Search for actual headers, not just ( and =
                 # We only really care about certain ones though
                 if currsec in ["sid", "star"]:
-                    # Search for the headers in () or ==
-                    # resub = re.search(r"^[=\(]+([^=]+)[=\)]+", line)
-                    # If either of these matches, start a new section
-                    # if resub is not None:
+                    # Search for the headers, start a new section
                     ochar = line[:1]
                     if ochar != " " and ochar != ";" and ochar != "\n":
-                        # subsec = resub[1]  # Get name of subsection
-                        subsec = line[:26].strip()
+                        subsec = line[:26].strip()  # Get name of subsection
                         if currsec == "sid":
                             self.sidsubs.append(subsec)
                         elif currsec == "star":
                             self.starsubs.append(subsec)
                         # print("New subsec: "+subsec)
-                        self.subsecs[currsec][subsec] = line  # Add the header line to it
+                        self.subsecs[currsec][subsec] = [line]  # Add the header line to it
                     elif subsec:  # if no new section but we are in one
                         # print("Adding to "+currsec+" -> "+subsec)
-                        self.subsecs[currsec][subsec] += line
-                    sections[currsec] += line  # write to the main list too
+                        self.subsecs[currsec][subsec].append(line)
+                    sections[currsec].append(line)  # write to the main list too
                 else:  # Any other random line
                     subsec = ""  # Just in case
-                    sections[currsec] += line
+                    sections[currsec].append(line)
 
         # Finally, add sections for the new diagrams
         # First find index of Airports section in the list of SID subsections
@@ -237,8 +231,8 @@ class sectorfileobj:
         self.sidsubs.insert(aptsubi+1, cdsec)
         # Initialize these subsections with the headers
         # addnewdiagrams() will put new content here
-        self.subsecs["sid"][cdsec] = currhdr
-        self.subsecs["sid"][refsec] = refhdr
+        self.subsecs["sid"][cdsec] = [currhdr]
+        self.subsecs["sid"][refsec] = [refhdr]
         return sections
 
     def coordlisttolines(self, coordlist, color):
@@ -254,7 +248,7 @@ class sectorfileobj:
             if lastcoord:
                 if color in self.deccolors.keys():
                     line = "%s %s %s" % (lastcoord, thiscoord, color)
-                    yield " "+line+"\n"
+                    yield " "+line
                     # print(line)
                 else:
                     print("  Color not found: "+color)
@@ -265,16 +259,15 @@ class sectorfileobj:
         # Old labels will be pruned out there
         newaptlbls = []
         # New section content with labels
-        newlabels = ""
+        newlabels = []
         # New section content with new diagram lines
-        newlines = ""
+        newlines = []
         # New section content with old diagram reference lines
-        newreflines = ""
-        # print(newlayouts)
+        newreflines = []
         # print(newlayouts)
         for apt, diag in {apt: diag for apt, diag in newlayouts.items() if apt in self.airports}.items():
             if diag.apdlines:
-                newlines += ";"+apt+"\n"
+                newlines.append(";"+apt)
                 # print(";"+airport)
                 for color, coords in diag.apdlines.items():
                     # print("COLOR: "+color)
@@ -282,10 +275,10 @@ class sectorfileobj:
                         self.usedcolors.append(color)
                     for coordlist in coords:
                         for line in self.coordlisttolines(coordlist, color):
-                            newlines += line
+                            newlines.append(line)
             if diag.labels:
                 newaptlbls.append(apt)
-                newlabels += "\n;"+apt+"\n"
+                newlabels.append(";"+apt)
                 # print(";"+airport)
                 for color, lbls in diag.labels.items():
                     # print(color)
@@ -295,12 +288,12 @@ class sectorfileobj:
                         if color in self.deccolors.keys():
                             # print(point)
                             cstr = ddtodms(point[1], point[2])
-                            newlabels += '"'+point[0]+'" '+cstr+" "+color+"\n"
+                            newlabels.append('"'+point[0]+'" '+cstr+" "+color)
                             # print(' "'+point[0]+'" '+cstr)
                         else:
                             print("  Color not found at "+apt+": "+color)
             if diag.reflines:
-                newreflines += "\n;"+apt+" - REF\n"
+                newreflines.append(";"+apt+" - REF")
                 # print("Adding ref lines for: "+apt)
                 # print(";"+airport)
                 for color, coords in diag.reflines.items():
@@ -309,44 +302,45 @@ class sectorfileobj:
                     # print("COLOR: "+color)
                     for coordlist in coords:
                         for line in self.coordlisttolines(coordlist, color):
-                            newreflines += line
+                            newreflines.append(line)
             # else:
                 # print("No ref lines for: "+apt)
         # Add the new content to applicable sections
-        self.subsecs["sid"]["(Current Diagrams)"] += "\n"+newlines
-        self.subsecs["sid"]["(Old Diagram REF)"] += "\n"+newreflines
+        self.subsecs["sid"]["(Current Diagrams)"].append(newlines)
+        self.subsecs["sid"]["(Old Diagram REF)"].append(newreflines)
         # First remove labels where we have new ones
         self.prunelabels(newaptlbls)
         # Add new labels to remaining ones
-        self.sections["labels"] += "\n"+newlabels
+        self.sections["labels"].append(newlabels)
 
     def prunelabels(self, newlabels):
         # Don't keep existing labels around airports we have new labels for
         # String to hold the lines we keep
-        keptlines = ""
+        keptlines = []
         # Print out the names and locations of airports to prune, mostly for debug
         # for newapt in newlabels:
         #   coords = self.airportcoords[newapt]
         #   print("  Will prune for %s: %f,%f" % (newapt, coords[0], coords[1]))
         # Actually prune all labels lines
         re_lbl = re.compile('^".+" +[NS]')
-        for line in self.sections["labels"].split('\n'):
+        for line in self.sections["labels"]:
             # reicao=re.search("^;.+K[A-Z0-9]{3}",line)
             # if reicao is not None:
             #   print("Found airport labels for: "+line)
             # See if line looks like a label
+            prune = 0
+            lblelems = []
             if re_lbl.search(line) is not None:
                 # print("Found label: "+line)
                 # Split by spaces and remove spaces/newline
-                lblpre = [i for i in line.strip().split('"') if i != '']
-                postelems = [i for i in lblpre[1].strip().split(' ') if i != '']
+                lblpre = [i for i in line.split('"') if i]
+                postelems = [i for i in lblpre[1].split(';')[0].strip().split(' ') if i]
                 # print(lblpre)
                 # print(postelems)
                 lblelems = ['"'+lblpre[0]+'"']
                 lblelems.extend(postelems)
                 # Convert coords to decimal
                 # print(lblelems)
-                prune = 0
                 if len(lblelems) > 2:
                     lblcoords = dmstodd((lblelems[1], lblelems[2]))
                     # Check against new airports
@@ -368,12 +362,12 @@ class sectorfileobj:
                 # else:
                 #     print("Bad elements: "+str(lblelems))
                 # elems=[i for i in line.strip().split(' ') if i!='']
-                if not prune:
-                    keptlines += line+"\n"  # Keep anything not pruned
-                    if len(lblelems) > 3:
-                        self.usedcolor(lblelems[3].lower())
+            if not prune:
+                keptlines.append(line)  # Keep anything not pruned
+                if len(lblelems) > 3:
+                    self.usedcolor(lblelems[3].lower())
         # Rewrite labels section to just be the lines we kept
-        self.sections["labels"] = "[LABELS]\n"+keptlines
+        self.sections["labels"] = keptlines
 
     def write(self):
         print("Writing new file...")
@@ -384,9 +378,7 @@ class sectorfileobj:
             for key, contents in self.sections.items():
                 # Handle special cases first
                 if key == "info":
-                    lines = contents.split('\n')
-                    lines[1] = lines[1]+self.modver
-                    contents = '\n'.join(lines)
+                    contents[1] = contents[1]+self.modver
                 if key == "colors":
                     # print("Writing: "+key)
                     # Write existing colors
@@ -402,16 +394,14 @@ class sectorfileobj:
                         newsct.write("#define "+color+" "+dcolor+"\n")
                 elif key == "sid":
                     # Need to insert new diagrams
-                    # Write header first
-                    newsct.write("[SID]\n")
                     # Go through the subsections
                     for sub in self.sidsubs:
-                        newsct.write(self.subsecs["sid"][sub])
-                elif key == "labels":
-                    newsct.write(contents)
+                        for line in self.subsecs["sid"][sub]:
+                            newsct.write(line+"\n")
                 else:  # Business as usual
                     # print("Writing: "+key)
-                    newsct.write(contents)
+                    for line in contents:
+                        newsct.write(line+"\n")
                 newsct.write("\n\n")
 
 
