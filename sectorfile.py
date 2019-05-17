@@ -240,18 +240,36 @@ class sectorfileobj:
         # Keep last coord to tie lines together
         # print("New coords list")
         lastcoord = ""
-        for line in coordlist:
+        for coord in coordlist:
             # Get DMS of these coordinates
-            thiscoord = ddtodms(line[0], line[1])
+            thiscoord = ddtodms(coord[0], coord[1])
             # Skip first point so we can get next one too
             if lastcoord:
                 if color in self.deccolors.keys():
-                    line = "%s %s %s" % (lastcoord, thiscoord, color)
-                    yield " "+line
+                    line = " %s %s %s" % (lastcoord, thiscoord, color)
+                    yield line
                     # print(line)
                 else:
                     print("  Color not found: "+color)
             lastcoord = thiscoord
+
+    def dashline(self, coords, color):
+        # Assume we just get two coords for now
+        totaldist = cosinedist(coords[0], coords[1])
+        dashlen = 60/6076  # Length of dashes in Nmi
+        dashes = int(totaldist/dashlen)
+        brng = math.radians(coordbrng(coords[0], coords[1]))
+        # print("Would make %i dashes over %.2f nmi hdg %.2f" % (dashes, totaldist, brng))
+        lastcoord = coords[0]
+        for i in range(dashes):
+            nextcoord = coordbrgdist(lastcoord, brng, dashlen)
+            # print(nextcoord)
+            if i % 2 == 0:
+                lastdms = ddtodms(lastcoord[0], lastcoord[1])
+                nextdms = ddtodms(nextcoord[0], nextcoord[1])
+                line = " %s %s %s" % (lastdms, nextdms, color)
+                yield line
+            lastcoord = nextcoord
 
     def addnewdiagrams(self, newlayouts):
         # List of airports with new labels
@@ -270,11 +288,17 @@ class sectorfileobj:
                 # print(";"+airport)
                 for color, coords in diag.apdlines.items():
                     # print("COLOR: "+color)
-                    if color not in self.usedcolors:
-                        self.usedcolors.append(color)
-                    for coordlist in coords:
-                        for line in self.coordlisttolines(coordlist, color):
-                            newlines.append(line)
+                    if color == "taxiway_dashed":
+                        # We'll assume this color is already used...
+                        for coordlist in coords:
+                            for line in self.dashline(coordlist, "taxiway"):
+                                newlines.append(line)
+                    else:
+                        if color not in self.usedcolors:
+                            self.usedcolors.append(color)
+                        for coordlist in coords:
+                            for line in self.coordlisttolines(coordlist, color):
+                                newlines.append(line)
             if diag.labels:
                 newaptlbls.append(apt)
                 newlabels.append(";"+apt)
@@ -468,3 +492,26 @@ def cosinedist(coord1, coord2):  # Use cosine to find distance between coordinat
     # gives d in Nmi
     d = math.acos(math.sin(phi1)*math.sin(phi2) + math.cos(phi1)*math.cos(phi2) * math.cos(dellamb)) * R
     return d
+
+
+def coordbrng(coord1, coord2):  # Find heading between coordinates
+    phi1 = math.radians(coord1[0])
+    phi2 = math.radians(coord2[0])
+    lamb1 = math.radians(coord1[1])
+    lamb2 = math.radians(coord2[1])
+    y = math.sin(lamb2-lamb1) * math.cos(phi2)
+    x = math.cos(phi1)*math.sin(phi2) - math.sin(phi1)*math.cos(phi2)*math.cos(lamb2-lamb1)
+    brng = math.degrees(math.atan2(y, x))
+    if brng < 0:
+        brng += 360
+    return brng
+
+
+def coordbrgdist(coord, brng, dist):
+    angdist = dist / 3440.06479
+    phi = math.radians(coord[0])
+    # lamb = math.radians(coord[1])
+    # brng = coordbrng(coord1, coord2)
+    lat = math.degrees(math.asin(math.sin(phi) * math.cos(angdist) + math.cos(phi) * math.sin(angdist) * math.cos(brng)))
+    lon = coord[1] + math.degrees(math.atan2(math.sin(brng) * math.sin(angdist) * math.cos(phi), math.cos(angdist) - math.sin(phi) * math.sin(math.radians(lat))))
+    return (lat, lon)
