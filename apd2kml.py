@@ -40,22 +40,32 @@ class sct2apd:
         return styles
 
     def htmlcolortokml(self, color):
+        # Get the color in KML format
         if color in vrccolors.defaultcolors:
+            # Get HTML color, strip the #
             color = vrccolors.defaultcolors[color].replace('#', '')
         elif re.search(r'^\d{,8}$', color) is not None:
+            # If it's a plain VRC format, convert to HTML and strip the #
             color = vrccolors.deccolortohtml(int(color)).replace('#', '')
+        # Might want to handle a non-match, just in case
+        # Split into RGB pairs
         colorsplit = [color[i:i+2] for i in range(0, len(color), 2)]
+        # Reverse because that's how KML does it
         colorsplit.reverse()
+        # Join back together and return KML color
         return ''.join(colorsplit)
 
     def genstyle(self, color):
         # print(vrccolors.defaultcolors[color])
+        # Return a style so we can color the lines
+        # Create a map and style IDs
         mapid = "m_" + color
         styleid = "s_" + color
         styleidhl = styleid + "_hl"
         pushurl = "http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"
         colorhex = self.htmlcolortokml(color.lower())
 
+        # TODO: Clean up this mess
         style = '<StyleMap id="'+mapid+'">\n'
         style += "\t\t<Pair>\n\t\t\t<key>normal</key>\n"
         style += "<styleUrl>#"+styleid+"</styleUrl>\n"
@@ -136,31 +146,44 @@ def findlines(masterdir, apt):
     kmlfn = apt + ".kml"
     kmlfile = masterdir / kmlfn
     airac = "1903"
-    modver = ""
+    # For remembering last coord to connect lines
     lastcoord = ""
     lastcolor = ""
+    # For storing a new line of coordinates
     thislist = []
+    # Read the ZSE file since it should have everything
     print("Building sector file object...")
-    sectorobj = sectorfile.sectorfileobj("ZSE-v3_05", masterdir, airac, modver)
+    sectorobj = sectorfile.sectorfileobj("ZSE-v3_05", masterdir, airac)
+    # Get the coordinates for the airport in question
     aptloc = sectorobj.airportcoords[apt]
+    # Create an object to convert and store KML
     apd = sct2apd(apt)
+    # Go through the SID section looking for layout lines
     print("Searching sid section for lines near "+apt+"...")
     for line in sectorobj.sections['sid']:
+        # See if line looks like a valid line
         if re.search(r'^[ \t]+N\d{3}', line) is not None:
-            elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
+            # Split it up to read the elements
+            elems = [i for i in line.split(';')[0].split(' ') if i != '']
             if len(elems) > 4:
                 # print(elems)
+                # Get decimal degrees of coordinates
                 coord1 = sectorfile.dmstodd((elems[0], elems[1]))
                 coord2 = sectorfile.dmstodd((elems[2], elems[3]))
                 color = elems[4]
+                # See if it's a continuation of last line
                 if coord1 == lastcoord and color == lastcolor:
                     thislist.append(coord2)
+                # Test for the initial lines, create a new list
                 elif lastcoord == "" and lastcolor == "":
                     thislist = [coord1, coord2]
                 else:
+                    # Last line finished, see if it ended near airport
                     if sectorfile.cosinedist(lastcoord, aptloc) < 3:
                         apd.addline(thislist, lastcolor)
+                    # Start a new list with these coordinates
                     thislist = [coord1, coord2]
+                # Remeber second coordinates for next time
                 lastcoord = coord2
                 lastcolor = color
     apd.writekml(kmlfile)
