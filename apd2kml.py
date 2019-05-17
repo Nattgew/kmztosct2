@@ -131,8 +131,8 @@ class sct2apd:
             k.write(kfooter)
 
 
-def findlines(apt):
-    masterdir = Path(r"C:\Users\matthew\Documents\VRC\sectorfiles\ZSE_MasterFile_1903")
+def findlines(masterdir, apt):
+    masterdir = Path(masterdir)
     kmlfn = apt + ".kml"
     kmlfile = masterdir / kmlfn
     airac = "1903"
@@ -166,5 +166,6 @@ def findlines(apt):
     apd.writekml(kmlfile)
 
 
-apt = sys.argv[1]
-findlines(apt)
+apt = sys.argv[2]
+masterdir = Path(sys.argv[1])
+findlines(masterdir, apt)
