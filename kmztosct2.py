@@ -26,18 +26,18 @@ sectorfiles = [
 ]
 
 # Location of the diagram kmz
-kmlfile = Path(sys.argv[1])
+kmlfile = Path(sys.argv[2])
 print("Will open: "+str(kmlfile))
 
 # Current airac cycle, part of filenames
 airac = "1903"
 
 # Modification version of current airac
-modver = "r2.4"
+modver = sys.argv[3]
 
 # Where to look for the master file set
-masterdir = sys.argv[2]
-newdiags = readkmz(kmlfile)
+masterdir = Path(sys.argv[1])
+newdiags = readkmz(masterdir / kmlfile)
 # print(newdiags["KSEA"].reflines)
 # Iterate over each sectorfile
 # Basic workflow is:

@@ -2,7 +2,6 @@
 
 import math
 import re
-from pathlib import Path
 import vrccolors
 
 # Basic structure of sct2 file is as follows
@@ -89,7 +88,7 @@ class sectorfileobj:
         # Just the file name
         self.basename = filename
         # Directory containing the file
-        self.directory = Path(directory)
+        self.directory = directory
         # Version info
         self.airac = airac
         self.modver = modver
@@ -306,12 +305,12 @@ class sectorfileobj:
             # else:
                 # print("No ref lines for: "+apt)
         # Add the new content to applicable sections
-        self.subsecs["sid"]["(Current Diagrams)"].append(newlines)
-        self.subsecs["sid"]["(Old Diagram REF)"].append(newreflines)
+        self.subsecs["sid"]["(Current Diagrams)"].extend(newlines)
+        self.subsecs["sid"]["(Old Diagram REF)"].extend(newreflines)
         # First remove labels where we have new ones
         self.prunelabels(newaptlbls)
         # Add new labels to remaining ones
-        self.sections["labels"].append(newlabels)
+        self.sections["labels"].extend(newlabels)
 
     def prunelabels(self, newlabels):
         # Don't keep existing labels around airports we have new labels for
@@ -396,11 +395,15 @@ class sectorfileobj:
                     # Need to insert new diagrams
                     # Go through the subsections
                     for sub in self.sidsubs:
+                        # print("Writing: "+sub)
+                        # print(self.subsecs["sid"][sub])
                         for line in self.subsecs["sid"][sub]:
                             newsct.write(line+"\n")
                 else:  # Business as usual
                     # print("Writing: "+key)
+                    # print(contents)
                     for line in contents:
+                        # print(line)
                         newsct.write(line+"\n")
                 newsct.write("\n\n")
 
@@ -430,20 +433,6 @@ def ddtodms(lat, lon):
     return coordstr
 
 
-def cosinedist(coord1, coord2):  # Use cosine to find distance between coordinates
-    # Split into lat/lon
-    lat1, lon1 = coord1
-    lat2, lon2 = coord2
-    # Convert latitudes to radians, get difference
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dellamb = math.radians(lon2-lon1)
-    R = 3440.06479  # Nmi
-    # gives d in Nmi
-    d = math.acos(math.sin(phi1)*math.sin(phi2) + math.cos(phi1)*math.cos(phi2) * math.cos(dellamb)) * R
-    return d
-
-
 def dmstodd(clist):
     # ["N000.00.00.000","E000.00.00.000"]
     # Get the letters
@@ -465,3 +454,17 @@ def dmstodd(clist):
     declat *= int(latelems[0])+int(latelems[1])/60+float(latelems[2]+"."+latelems[3])/3600
     declon *= int(lonelems[0])+int(lonelems[1])/60+float(lonelems[2]+"."+lonelems[3])/3600
     return (declat, declon)
+
+
+def cosinedist(coord1, coord2):  # Use cosine to find distance between coordinates
+    # Split into lat/lon
+    lat1, lon1 = coord1
+    lat2, lon2 = coord2
+    # Convert latitudes to radians, get difference
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dellamb = math.radians(lon2-lon1)
+    R = 3440.06479  # Nmi
+    # gives d in Nmi
+    d = math.acos(math.sin(phi1)*math.sin(phi2) + math.cos(phi1)*math.cos(phi2) * math.cos(dellamb)) * R
+    return d
