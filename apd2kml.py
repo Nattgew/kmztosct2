@@ -7,7 +7,7 @@
 import re
 import sys
 from pathlib import Path
-from sectorfile import dmstodd
+import sectorfile
 import vrccolors
 
 
@@ -54,7 +54,7 @@ class sct2apd:
         styleid = "s_" + color
         styleidhl = styleid + "_hl"
         pushurl = "http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"
-        colorhex = self.htmlcolortokml(color)
+        colorhex = self.htmlcolortokml(color.lower())
 
         style = '<StyleMap id="'+mapid+'">\n'
         style += "\t\t<Pair>\n\t\t\t<key>normal</key>\n"
@@ -131,41 +131,40 @@ class sct2apd:
             k.write(kfooter)
 
 
-currfile = Path(sys.argv[1])
-kmlfile = currfile.with_suffix(".kml")
-name = currfile.stem
-f = open(currfile, 'r')
-lastcoord = ""
-lastcolor = ""
-thislist = []
-apd = sct2apd(name)
-for line in f:
-    if re.search(r'^[ \t]+N\d{3}', line) is not None:
-        elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
-        if len(elems) > 4:
-            # print(elems)
-            coord1 = dmstodd((elems[0], elems[1]))
-            coord2 = dmstodd((elems[2], elems[3]))
-            color = elems[4]
-            if coord1 == lastcoord and color == lastcolor:
-                thislist.append(coord2)
-            elif lastcoord == "" and lastcolor == "":
-                thislist = [coord1, coord2]
-            else:
-                apd.addline(thislist, lastcolor)
-                thislist = [coord1, coord2]
-            lastcoord = coord2
-            lastcolor = color
-        else:
-            print("Not recognizing line: "+line)
-    elif re.search('^".+" +[NS]', line) is not None:
-        lblpre = [i for i in line.strip().split('"') if i != '']
-        postelems = [i for i in lblpre[1].strip().split(' ') if i != '']
-        lblelems = ['"'+lblpre[0]+'"']
-        lblelems.extend(postelems)
-        if len(lblelems) > 1:
-            name = lblelems[0].replace('"', '')
-            lblcoords = dmstodd((lblelems[1], lblelems[2]))
-            color = lblelems[3]
-            apd.addlabel(name, lblcoords, color)
-apd.writekml(kmlfile)
+def findlines(apt):
+    masterdir = Path(r"C:\Users\matthew\Documents\VRC\sectorfiles\ZSE_MasterFile_1903")
+    kmlfn = apt + ".kml"
+    kmlfile = masterdir / kmlfn
+    airac = "1903"
+    modver = ""
+    lastcoord = ""
+    lastcolor = ""
+    thislist = []
+    print("Building sector file object...")
+    sectorobj = sectorfile.sectorfileobj("ZSE-v3_05", masterdir, airac, modver)
+    aptloc = sectorobj.airportcoords[apt]
+    apd = sct2apd(apt)
+    print("Searching sid section for lines near "+apt+"...")
+    for line in sectorobj.sections['sid']:
+        if re.search(r'^[ \t]+N\d{3}', line) is not None:
+            elems = [i for i in re.sub(r";.+", '', line).strip().split(' ') if i != '']
+            if len(elems) > 4:
+                # print(elems)
+                coord1 = sectorfile.dmstodd((elems[0], elems[1]))
+                coord2 = sectorfile.dmstodd((elems[2], elems[3]))
+                color = elems[4]
+                if coord1 == lastcoord and color == lastcolor:
+                    thislist.append(coord2)
+                elif lastcoord == "" and lastcolor == "":
+                    thislist = [coord1, coord2]
+                else:
+                    if sectorfile.cosinedist(lastcoord, aptloc) < 3:
+                        apd.addline(thislist, lastcolor)
+                    thislist = [coord1, coord2]
+                lastcoord = coord2
+                lastcolor = color
+    apd.writekml(kmlfile)
+
+
+apt = sys.argv[1]
+findlines(apt)
