@@ -26,7 +26,7 @@ sectorfiles = [
 ]
 
 # Location of the diagram kmz
-kmlfile = Path(sys.argv[2])
+kmlfile = sys.argv[2]
 print("Will open: "+str(kmlfile))
 
 # Current airac cycle, part of filenames
