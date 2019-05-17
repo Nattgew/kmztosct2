@@ -66,26 +66,26 @@ class sct2apd:
         colorhex = self.htmlcolortokml(color.lower())
 
         # TODO: Clean up this mess
-        style = '<StyleMap id="'+mapid+'">\n'
+        style = '\t<StyleMap id="'+mapid+'">\n'
         style += "\t\t<Pair>\n\t\t\t<key>normal</key>\n"
-        style += "<styleUrl>#"+styleid+"</styleUrl>\n"
+        style += "\t\t\t<styleUrl>#"+styleid+"</styleUrl>\n"
         style += "\t\t</Pair>\n\t\t<Pair>\n\t\t\t<key>highlight</key>\n"
-        style += "<styleUrl>#"+styleidhl+"</styleUrl>\n"
-        style += "</Pair>\n\t</StyleMap>\n"
-        style += '<Style id="'+styleidhl+'">\n'
-        style += "<IconStyle>\n\t\t<scale>1.3</scale>\n\t\t<Icon>\n"
-        style += "<href>"+pushurl+"</href>\n"
-        style += '</Icon>\n\t\t<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>\n'
-        style += "</IconStyle>\n\t\t<LineStyle>\n"
-        style += "<color>ff"+colorhex+"</color>\n"
-        style += "</LineStyle>\n\t\t</Style>\n"
-        style += '<Style id="'+styleid+'">\n'
-        style += "<IconStyle>\n\t\t<scale>1.1</scale>\n\t\t<Icon>\n"
-        style += "<href>"+pushurl+"</href>\n"
-        style += '</Icon>\n\t\t<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>\n'
-        style += "</IconStyle>\n\t\t<LineStyle>\n"
-        style += "<color>ff"+colorhex+"</color>\n"
-        style += "</LineStyle>\n\t</Style>\n"
+        style += "\t\t\t<styleUrl>#"+styleidhl+"</styleUrl>\n"
+        style += "\t\t</Pair>\n\t</StyleMap>\n"
+        style += '\t<Style id="'+styleidhl+'">\n'
+        style += "\t\t<IconStyle>\n\t\t\t<scale>1.3</scale>\n\t\t\t<Icon>\n"
+        style += "\t\t\t\t<href>"+pushurl+"</href>\n"
+        style += '\t\t\t</Icon>\n\t\t\t<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>\n'
+        style += "\t\t</IconStyle>\n\t\t<LineStyle>\n"
+        style += "\t\t\t<color>ff"+colorhex+"</color>\n"
+        style += "\t\t</LineStyle>\n\t</Style>\n"
+        style += '\t<Style id="'+styleid+'">\n'
+        style += "\t\t<IconStyle>\n\t\t\t<scale>1.1</scale>\n\t\t\t<Icon>\n"
+        style += "\t\t\t\t<href>"+pushurl+"</href>\n"
+        style += '\t\t\t</Icon>\n\t\t\t<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>\n'
+        style += "\t\t</IconStyle>\n\t\t<LineStyle>\n"
+        style += "\t\t\t<color>ff"+colorhex+"</color>\n"
+        style += "\t\t</LineStyle>\n\t</Style>\n"
 
         return style
 
