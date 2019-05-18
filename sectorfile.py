@@ -334,6 +334,8 @@ class sectorfileobj:
         # First remove labels where we have new ones
         self.prunelabels(newaptlbls)
         # Add new labels to remaining ones
+        if not self.sections["labels"]:
+            self.sections["labels"] = ["[LABELS]"]
         self.sections["labels"].extend(newlabels)
 
     def prunelabels(self, newlabels):
