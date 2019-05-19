@@ -259,7 +259,15 @@ class sectorfileobj:
         dashes = int(totaldist/dashlen)
         brng = math.radians(coordbrng(coords[0], coords[1]))
         # print("Would make %i dashes over %.2f nmi hdg %.2f" % (dashes, totaldist, brng))
-        lastcoord = coords[0]
+        # See if we'd end on an extra long empty space
+        if not dashes % 2:
+            actualdashes = dashes-1
+            # Get amount of empty space at the end
+            deficit = totaldist-dashlen*actualdashes
+            # Split this on both sides of the line
+            lastcoord = coordbrgdist(coords[0], brng, deficit/2)
+        else:
+            lastcoord = coords[0]
         for i in range(dashes):
             nextcoord = coordbrgdist(lastcoord, brng, dashlen)
             # print(nextcoord)
