@@ -17,10 +17,10 @@ class newAirportDiag:
             self.labels[color] = []
         self.labels[color].append(label)
 
-    def addline(self, coordlist, color):
+    def addline(self, name, coordlist, color):
         if color not in self.apdlines:
             self.apdlines[color] = []
-        self.apdlines[color].append(coordlist)
+        self.apdlines[color].append((name, coordlist))
 
     def addreflabel(self, label, color):
         if color not in self.reflabels:
@@ -83,7 +83,7 @@ def readkmz(kmlfile):
                                         nametag = pm.findall("sfn:name", ns)
                                         for tag in nametag:
                                             pmname = tag.text
-                                            print("  Placemark: "+pmname)  # REF ONLY for lines
+                                            print("  Placemark: "+pmname)
                                         point = pm.findall("sfn:Point", ns)
                                         lstr = pm.findall("sfn:LineString", ns)
                                         elpol = pm.findall("sfn:Polygon", ns)
@@ -115,7 +115,7 @@ def readkmz(kmlfile):
                                                         lon = float(cfields[0])
                                                         # apdlines[aptname][subname][apdi].append([lat,lon])
                                                         clist.append((lat, lon))
-                                                newdiagrams[aptname].addline(clist, subname)
+                                                newdiagrams[aptname].addline(pmname, clist, subname)
                                                 # print("   Line coords: "+cleancoords)
                                                 # print("   Line coords:")
                                                 # print(cleancoords)
@@ -140,7 +140,7 @@ def readkmz(kmlfile):
                                                                 lon = float(cfields[0])
                                                                 # apdlines[aptname][subname][apdi].append([lat,lon])
                                                                 clist.append((lat, lon))
-                                                        newdiagrams[aptname].addline(clist, subname)
+                                                        newdiagrams[aptname].addline(pmname, clist, subname)
                                                         # print("   Line coords: "+cleancoords)
                                                         print("   Line coords:")
                                                         # print(cleancoords)

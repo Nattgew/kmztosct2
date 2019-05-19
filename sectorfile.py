@@ -253,10 +253,9 @@ class sectorfileobj:
                     print("  Color not found: "+color)
             lastcoord = thiscoord
 
-    def dashline(self, coords, color):
+    def dashline(self, coords, color, dashlen):
         # Assume we just get two coords for now
         totaldist = cosinedist(coords[0], coords[1])
-        dashlen = 60/6076  # Length of dashes in Nmi
         dashes = int(totaldist/dashlen)
         brng = math.radians(coordbrng(coords[0], coords[1]))
         # print("Would make %i dashes over %.2f nmi hdg %.2f" % (dashes, totaldist, brng))
@@ -269,6 +268,22 @@ class sectorfileobj:
                 nextdms = ddtodms(nextcoord[0], nextcoord[1])
                 line = " %s %s %s" % (lastdms, nextdms, color)
                 yield line
+            lastcoord = nextcoord
+
+    def drawcircle(self, coords, color):
+        # Draws circle with center at first point, radius of length
+        center = coords[0]
+        radius = cosinedist(coords[0], coords[1])
+        segments = 18
+        increment = int(360/segments)
+        lastcoord = coordbrgdist(center, 0, radius)
+        for i in range(increment, 360+increment, increment):
+            # print("Projecting %i deg at %.2f nmi" % (i, radius))
+            nextcoord = coordbrgdist(center, math.radians(i), radius)
+            lastdms = ddtodms(lastcoord[0], lastcoord[1])
+            nextdms = ddtodms(nextcoord[0], nextcoord[1])
+            line = " %s %s %s" % (lastdms, nextdms, color)
+            yield line
             lastcoord = nextcoord
 
     def addnewdiagrams(self, newlayouts):
@@ -286,18 +301,28 @@ class sectorfileobj:
             if diag.apdlines:
                 newlines.append(";"+apt)
                 # print(";"+airport)
-                for color, coords in diag.apdlines.items():
+                for color, linelist in diag.apdlines.items():
                     # print("COLOR: "+color)
-                    if color == "taxiway_dashed":
-                        # We'll assume this color is already used...
-                        for coordlist in coords:
-                            for line in self.dashline(coordlist, "taxiway"):
+                    if color not in self.usedcolors:
+                        self.usedcolors.append(color)
+                    for linestring in linelist:
+                        nameelem = linestring[0].split('_')
+                        name = nameelem[0]
+                        coords = linestring[1]
+                        if name == "dashed":
+                            # We'll assume this color is already used...
+                            if len(nameelem) > 1:
+                                dashlen = int(nameelem[1])/6076
+                                # print("Setting custom dash length: "+nameelem[1])
+                            else:
+                                dashlen = 60/6076
+                            for line in self.dashline(coords, color, dashlen):
                                 newlines.append(line)
-                    else:
-                        if color not in self.usedcolors:
-                            self.usedcolors.append(color)
-                        for coordlist in coords:
-                            for line in self.coordlisttolines(coordlist, color):
+                        elif name == "circle":
+                            for line in self.drawcircle(coords, color):
+                                newlines.append(line)
+                        else:
+                            for line in self.coordlisttolines(coords, color):
                                 newlines.append(line)
             if diag.labels:
                 newaptlbls.append(apt)
