@@ -2,7 +2,7 @@
 
 ## apd2kml
 
-Converts an airport diagram from the sct file to kml. Give the master file directory (containing ZSE-v3_05.sct2) and the airport code. Everything within 3 miles of the airport center is brought over, saved to master directory as code.kml.
+Converts an airport diagram from the sct file to kml. Give the master file directory (containing ZSE-v3_05.sct2) and the airport code. Everything within 3 miles of the airport center is brought over, saved to master directory as code.kml. The structure of the kml file should match what the kmztosct2 program expects.
 
 apd2kml.py "C:\Path\To\MasterDir" "KPDX"
 
