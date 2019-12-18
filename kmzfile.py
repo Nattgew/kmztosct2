@@ -87,6 +87,12 @@ def readkmz(kmlfile):
                                         point = pm.findall("sfn:Point", ns)
                                         lstr = pm.findall("sfn:LineString", ns)
                                         elpol = pm.findall("sfn:Polygon", ns)
+                                        descfind = pm.findall("sfn:description", ns)
+                                        if descfind:
+                                            desc = descfind[0].text.strip()
+                                            print("   Description: "+desc)
+                                        else:
+                                            desc = ""
                                         for pt in point:  # add any points to this folder
                                             coords = pt.findall("sfn:coordinates", ns)
                                             for coord in coords:  # Get the coords tag
@@ -94,7 +100,7 @@ def readkmz(kmlfile):
                                                 lat = float(cfields[1])
                                                 lon = float(cfields[0])
                                                 # labels[aptname][subname].append([pmname,lat,lon])
-                                                newdiagrams[aptname].addlabel((pmname, lat, lon), subname)
+                                                newdiagrams[aptname].addlabel((pmname, lat, lon, desc), subname)
                                                 print("   Point coords: "+coord.text)
                                                 # print(cfields)
                                                 # cstr = ddtodms()

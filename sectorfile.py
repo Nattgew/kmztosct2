@@ -92,6 +92,7 @@ class sectorfileobj:
         # Version info
         self.airac = airac
         self.modver = modver
+        self.magvar = 0
         # Name of original file
         self.masterfilename = filename+"_"+self.airac+".sct2"
         # Name of modified file to be saved
@@ -144,6 +145,7 @@ class sectorfileobj:
         currsec = "header"
         subsec = ''
         secfilepath = self.directory / self.masterfilename
+        infosec = 0
         # Open sector file and iterate through the lines
         with open(secfilepath, 'r') as f:
             for line in f:
@@ -167,6 +169,11 @@ class sectorfileobj:
                         elems = [i for i in line.split(';')[0].split(' ') if i]
                         if len(elems) > 2:
                             self.usedcolor(elems[0].lower())
+                elif currsec == "info":
+                    infosec += 1
+                    if infosec == 8:
+                        self.magvar = float(line)
+                        print("Magvar: "+str(self.magvar))
                 # Handle other sections
                 else:
                     elems = [i for i in line.split(';')[0].split(' ') if i]
@@ -294,6 +301,73 @@ class sectorfileobj:
             yield line
             lastcoord = nextcoord
 
+    def drawstring(self, coords, name, color):
+        # Draws out text using lines
+        import freetype
+
+        # face = freetype.Face('/usr/share/fonts/TTF/DejaVuSans.ttf')
+        # Load the font face to use
+        # Excellent single stroke - machtgth.ttf
+        face.set_char_size( 16*90 )
+        height = 5
+        # Draw each character
+        for c in name:
+            # Track the max and min to determine character witdth
+            maxlen = -200
+            minlen = 200
+            face.load_char(c, flags)
+            slot = face.glyph
+            outline = slot.outline
+            lastcoord = ""
+            # Loop through the points to draw lines
+            for pair in outline.points:
+                #latp, lonp = self.rotatepoint((pair[1]/10000, pair[0]/10000), self.magvar/2)
+                # Convert font coordinates to lat/lon
+                # Font points are scaled to 1000 height, divide by this to make them 1 degree lat tall
+                # Then multiply by height/60 to set height in Nm
+                newcoords = (coords[0]+pair[1]*height/60000, coords[1]+pair[0]*height/60000)
+                # Get distance from origin to this point
+                dist = cosinedist(coords, newcoords)
+                #print(pair[1]/pair[0])
+                #brg = math.pi/2 - math.atan(pair[1]/pair[0]) - math.radians(self.magvar)
+                # Get bearing from origin to this point
+                # Correct this for magnetic variation
+                brg = math.radians(coordbrng(coords, newcoords) - self.magvar)
+                # Project the new point accounting for the magnetic variation
+                lat, lon = coordbrgdist(coords, brg, dist)
+                #print(coords)
+                #print(dist)
+                #print(math.degrees(brg))
+                #print(lat)
+                #print(lon)
+                #lat = coords[0]+latp
+                #lon = coords[1]+lonp
+                # Track the width of the character
+                if lon > maxlen:
+                    maxlen = lon
+                if lon < minlen:
+                    minlen = lon
+                # Convert this coordinate for printing
+                thiscoord = ddtodms(lat, lon)
+                if lastcoord:
+                    line = " %s %s %s" % (lastcoord, thiscoord, color)
+                    # print(line)
+                    yield line
+                lastcoord = thiscoord
+            #latp, lonp = self.rotatepoint((0,1.1*(maxlen-minlen)), self.magvar/2)
+            # Project origin for next character
+            dist = cosinedist(coords, (coords[0], coords[1]+1.1*(maxlen-minlen)))
+            latp, lonp = coordbrgdist(coords, math.pi/2 - math.radians(self.magvar), dist)
+            coords = (latp, lonp)
+            print(line)
+        #[(828, 128), (728, 58), (543, 0), (437, 0), (262, 0), (74, 172), (74, 307), (74, 385), (145, 515), (260, 594), (332, 614), (385, 628), (492, 641), (710, 668), (813, 704), (814, 731), (814, 738), (814, 819), (763, 851), (694, 896), (558, 896), (431, 896), (310, 840), (281, 768), (105, 768), (129, 879), (239, 1015), (447, 1088), (584, 1088), (720, 1088), (890, 1023), (970, 924), (986, 848), (995, 801), (995, 696), (995, 485), (995, 264), (1018, 83), (1052, 0), (864, 0), (836, 55), (813, 512), (715, 481), (519, 460), (408, 447), (316, 417), (266, 357), (266, 321), (266, 266), (375, 192), (480, 192), (584, 192), (746, 277), (784, 334), (813, 378), (813, 464)]
+
+    def rotatepoint(self, coords, angle):
+        angle = math.radians(angle)
+        lat = coords[1] * math.sin(angle) + coords[0] * math.cos(angle)
+        lon = coords[1] * math.cos(angle) - coords[0] * math.sin(angle)
+        return lat, lon
+
     def addnewdiagrams(self, newlayouts):
         # List of airports with new labels
         # Old labels will be pruned out there
@@ -343,8 +417,12 @@ class sectorfileobj:
                     for point in lbls:
                         if color in self.deccolors.keys():
                             # print(point)
-                            cstr = ddtodms(point[1], point[2])
-                            newlabels.append('"'+point[0]+'" '+cstr+" "+color)
+                            if point[3] == "plot=True":
+                                for line in self.drawstring((point[1], point[2]), point[0], color):
+                                    newlines.append(line)
+                            else:
+                                cstr = ddtodms(point[1], point[2])
+                                newlabels.append('"'+point[0]+'" '+cstr+" "+color)
                             # print(' "'+point[0]+'" '+cstr)
                         else:
                             print("  Color not found at "+apt+": "+color)
