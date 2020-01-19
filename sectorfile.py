@@ -219,27 +219,28 @@ class sectorfileobj:
                     subsec = ""  # Just in case
                     sections[currsec].append(line)
 
-        # Finally, add sections for the new diagrams
-        # First find index of Airports section in the list of SID subsections
-        aptsubi = self.sidsubs.index("(Airports)")
-        # VRC wants this at the end of header lines
-        fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
-        # Section for new diagrams
-        cdsec = "(Current Diagrams)"
-        # Section for old reference items
-        refsec = "(Old Diagram REF)"
-        # Create full header lines
-        # Header name is first 26 characters
-        currhdr = "\n"+cdsec.ljust(27)+fakecoords
-        refhdr = "\n"+refsec.ljust(27)+fakecoords
-        # Insert these sections into to the subsection list before Airports
-        self.sidsubs.insert(aptsubi+1, refsec)
-        self.sidsubs.insert(aptsubi+1, cdsec)
-        # Initialize these subsections with the headers
-        # addnewdiagrams() will put new content here
-        self.subsecs["sid"][cdsec] = [currhdr]
-        self.subsecs["sid"][refsec] = [refhdr]
+        # Index of Airports section in the list of SID subsections
+        self.aptsubi = self.sidsubs.index("(Airports)")
+
         return sections
+
+    def addsubsec(self, name):
+        # Add a new subsection to the diagrams
+        # Section for new diagrams
+        # TODO: truncate to max length
+        sectionname = "("+name+")"
+        if sectionname not in self.subsecs["sid"]:
+            print("  Adding subsec: "+name)
+            # VRC wants this at the end of header lines
+            fakecoords = "N000.00.00.000 E000.00.00.000 N000.00.00.000 E000.00.00.000\n"
+            # Create full header lines
+            # Header name is first 26 characters
+            rhdr = "\n"+sectionname.ljust(27)+fakecoords
+            # Insert these sections into to the subsection list after Airports
+            self.sidsubs.insert(self.aptsubi+1, sectionname)
+            # Initialize these subsections with the headers
+            # addnewdiagrams() will put new content here
+            self.subsecs["sid"][sectionname] = [rhdr]
 
     def coordlisttolines(self, coordlist, color):
         # Convert a list of coordinates to lines
@@ -301,15 +302,19 @@ class sectorfileobj:
             yield line
             lastcoord = nextcoord
 
-    def drawstring(self, coords, name, color):
-        # Draws out text using lines
+    def drawstring(self, coords, name, color, scale, magvec):
+        # Draws out text in "name" using lines, aligned to magnetic vector magvec
         import freetype
 
         # face = freetype.Face('/usr/share/fonts/TTF/DejaVuSans.ttf')
         # Load the font face to use
         # Excellent single stroke - machtgth.ttf
+        flags = freetype.FT_LOAD_DEFAULT | freetype.FT_LOAD_NO_BITMAP
         face.set_char_size( 16*90 )
-        height = 5
+        #height = 5
+        print("Magvec: "+str(magvec))
+        vector = -magvec + 90 + self.magvar
+        print("Drawing "+name+" with scale "+str(scale)+" and vector "+str(vector))
         # Draw each character
         for c in name:
             # Track the max and min to determine character witdth
@@ -325,14 +330,14 @@ class sectorfileobj:
                 # Convert font coordinates to lat/lon
                 # Font points are scaled to 1000 height, divide by this to make them 1 degree lat tall
                 # Then multiply by height/60 to set height in Nm
-                newcoords = (coords[0]+pair[1]*height/60000, coords[1]+pair[0]*height/60000)
+                newcoords = (coords[0]+pair[1]*scale/60000, coords[1]+pair[0]*scale/60000)
                 # Get distance from origin to this point
                 dist = cosinedist(coords, newcoords)
                 #print(pair[1]/pair[0])
                 #brg = math.pi/2 - math.atan(pair[1]/pair[0]) - math.radians(self.magvar)
                 # Get bearing from origin to this point
                 # Correct this for magnetic variation
-                brg = math.radians(coordbrng(coords, newcoords) - self.magvar)
+                brg = math.radians(coordbrng(coords, newcoords) - vector)
                 # Project the new point accounting for the magnetic variation
                 lat, lon = coordbrgdist(coords, brg, dist)
                 #print(coords)
@@ -357,9 +362,9 @@ class sectorfileobj:
             #latp, lonp = self.rotatepoint((0,1.1*(maxlen-minlen)), self.magvar/2)
             # Project origin for next character
             dist = cosinedist(coords, (coords[0], coords[1]+1.1*(maxlen-minlen)))
-            latp, lonp = coordbrgdist(coords, math.pi/2 - math.radians(self.magvar), dist)
+            latp, lonp = coordbrgdist(coords, math.pi/2 - math.radians(vector), dist)
             coords = (latp, lonp)
-            print(line)
+            #print(line)
         #[(828, 128), (728, 58), (543, 0), (437, 0), (262, 0), (74, 172), (74, 307), (74, 385), (145, 515), (260, 594), (332, 614), (385, 628), (492, 641), (710, 668), (813, 704), (814, 731), (814, 738), (814, 819), (763, 851), (694, 896), (558, 896), (431, 896), (310, 840), (281, 768), (105, 768), (129, 879), (239, 1015), (447, 1088), (584, 1088), (720, 1088), (890, 1023), (970, 924), (986, 848), (995, 801), (995, 696), (995, 485), (995, 264), (1018, 83), (1052, 0), (864, 0), (836, 55), (813, 512), (715, 481), (519, 460), (408, 447), (316, 417), (266, 357), (266, 321), (266, 266), (375, 192), (480, 192), (584, 192), (746, 277), (784, 334), (813, 378), (813, 464)]
 
     def rotatepoint(self, coords, angle):
@@ -374,74 +379,100 @@ class sectorfileobj:
         newaptlbls = []
         # New section content with labels
         newlabels = []
+        twylabels = []
         # New section content with new diagram lines
-        newlines = []
+        # newlines = []
         # New section content with old diagram reference lines
-        newreflines = []
+        # newreflines = []
         # print(newlayouts)
+        # Loop through each airport in this sector
         for apt, diag in {apt: diag for apt, diag in newlayouts.items() if apt in self.airports}.items():
-            if diag.apdlines:
-                newlines.append(";"+apt)
-                # print(";"+airport)
-                for color, linelist in diag.apdlines.items():
-                    # print("COLOR: "+color)
-                    if color not in self.usedcolors:
-                        self.usedcolors.append(color)
-                    for linestring in linelist:
-                        nameelem = linestring[0].split('_')
-                        name = nameelem[0]
-                        coords = linestring[1]
-                        if name == "dashed":
-                            # We'll assume this color is already used...
-                            if len(nameelem) > 1:
-                                dashlen = int(nameelem[1])/6076
-                                # print("Setting custom dash length: "+nameelem[1])
-                            else:
-                                dashlen = 60/6076
-                            for line in self.dashline(coords, color, dashlen):
-                                newlines.append(line)
-                        elif name == "circle":
-                            for line in self.drawcircle(coords, color):
-                                newlines.append(line)
-                        else:
-                            for line in self.coordlisttolines(coords, color):
-                                newlines.append(line)
-            if diag.labels:
-                newaptlbls.append(apt)
-                newlabels.append(";"+apt)
-                # print(";"+airport)
-                for color, lbls in diag.labels.items():
-                    # print(color)
-                    if color not in self.usedcolors:
-                        self.usedcolors.append(color)
-                    for point in lbls:
-                        if color in self.deccolors.keys():
-                            # print(point)
-                            if point[3] == "plot=True":
-                                for line in self.drawstring((point[1], point[2]), point[0], color):
+            print("Adding new diagrams for: "+apt)
+
+            for cat, objs in diag.cats.items():
+                print(" Processing cat: "+cat)
+                self.addsubsec(cat)
+                if objs['lines']:
+                    newlines = []
+                    # Comment as heading for this airport's stuff
+                    newlines.append(";"+apt)
+                    # print(";"+airport)
+                    for color, linelist in objs['lines'].items():
+                        # print("COLOR: "+color)
+                        if color not in self.usedcolors:
+                            self.usedcolors.append(color)
+                        for linestring in linelist:
+                            nameelem = linestring[0].split('_')
+                            name = nameelem[0]
+                            coords = linestring[1]
+                            desc = linestring[2]
+                            if name == "dashed":
+                                # We'll assume this color is already used...
+                                if len(nameelem) > 1:
+                                    dashlen = int(nameelem[1])/6076
+                                    # print("Setting custom dash length: "+nameelem[1])
+                                else:
+                                    dashlen = 60/6076
+                                for line in self.dashline(coords, color, dashlen):
+                                    newlines.append(line)
+                            elif name == "circle":
+                                for line in self.drawcircle(coords, color):
                                     newlines.append(line)
                             else:
-                                cstr = ddtodms(point[1], point[2])
-                                newlabels.append('"'+point[0]+'" '+cstr+" "+color)
-                            # print(' "'+point[0]+'" '+cstr)
-                        else:
-                            print("  Color not found at "+apt+": "+color)
-            if diag.reflines:
-                newreflines.append(";"+apt+" - REF")
-                # print("Adding ref lines for: "+apt)
-                # print(";"+airport)
-                for color, coords in diag.reflines.items():
-                    if color not in self.usedcolors:
-                        self.usedcolors.append(color)
-                    # print("COLOR: "+color)
-                    for coordlist in coords:
-                        for line in self.coordlisttolines(coordlist, color):
-                            newreflines.append(line)
+                                if desc == "plot=True":
+                                    scale = cosinedist(coords[0], coords[1])
+                                    vert = coordbrng(coords[0], coords[1]) + self.magvar
+                                    print("Vert brg: "+str(vert))
+                                    for line in self.drawstring((coords[0][0], coords[0][1]), name, color, scale, vert+90):
+                                        newlines.append(line)
+                                else:
+                                    for line in self.coordlisttolines(coords, color):
+                                        newlines.append(line)
+                    self.subsecs["sid"]["("+cat+")"].extend(newlines)
+                if objs['labels']:
+                    # Add this to list of airports with new labels
+                    newaptlbls.append(apt)
+                    # Comment as heading for this airport's stuff
+                    newlabels.append(";"+apt)
+                    # print(";"+airport)
+                    for color, lbls in objs['labels'].items():
+                        # print(color)
+                        if color not in self.usedcolors:
+                            self.usedcolors.append(color)
+                        for point in lbls:
+                            if color in self.deccolors.keys():
+                                # print(point)
+                                if point[3] == "plot=True":
+                                    for line in self.drawstring((point[1], point[2]), point[0], color, 5, 90):
+                                        newlines.append(line)
+                                else:
+                                    cstr = ddtodms(point[1], point[2])
+                                    newlabels.append('"'+point[0]+'" '+cstr+" "+color)
+                                    if color == "twyrwy_labels":
+                                        for line in self.drawstring((point[1], point[2]), point[0], color, .01, 90):
+                                            twylabels.append(line)
+                                # print(' "'+point[0]+'" '+cstr)
+                            else:
+                                print("  Color not found at "+apt+": "+color)
+            self.addsubsec("Taxiways")
+            self.subsecs["sid"]["(Taxiways)"].extend(twylabels)
+            # if diag.reflines:
+            #     # Comment as heading for this airport's stuff
+            #     newreflines.append(";"+apt+" - REF")
+            #     # print("Adding ref lines for: "+apt)
+            #     # print(";"+airport)
+            #     for color, coords in diag.reflines.items():
+            #         if color not in self.usedcolors:
+            #             self.usedcolors.append(color)
+            #         # print("COLOR: "+color)
+            #         for coordlist in coords:
+            #             for line in self.coordlisttolines(coordlist, color):
+            #                 newreflines.append(line)
             # else:
                 # print("No ref lines for: "+apt)
         # Add the new content to applicable sections
-        self.subsecs["sid"]["(Current Diagrams)"].extend(newlines)
-        self.subsecs["sid"]["(Old Diagram REF)"].extend(newreflines)
+        # self.subsecs["sid"]["(Current Diagrams)"].extend(newlines)
+        # self.subsecs["sid"]["(Old Diagram REF)"].extend(newreflines)
         # First remove labels where we have new ones
         self.prunelabels(newaptlbls)
         # Add new labels to remaining ones
