@@ -312,9 +312,9 @@ class sectorfileobj:
         flags = freetype.FT_LOAD_DEFAULT | freetype.FT_LOAD_NO_BITMAP
         face.set_char_size( 16*90 )
         #height = 5
-        print("Magvec: "+str(magvec))
+        #print("Magvec: "+str(magvec))
         vector = -magvec + 90 + self.magvar
-        print("Drawing "+name+" with scale "+str(scale)+" and vector "+str(vector))
+        #print("Drawing "+name+" with scale "+str(scale)+" and vector "+str(vector))
         # Draw each character
         for c in name:
             # Track the max and min to determine character witdth
@@ -323,42 +323,51 @@ class sectorfileobj:
             face.load_char(c, flags)
             slot = face.glyph
             outline = slot.outline
-            lastcoord = ""
+            start = 0
+            # print(outline.contours)
+            # print(outline.points)
             # Loop through the points to draw lines
-            for pair in outline.points:
-                #latp, lonp = self.rotatepoint((pair[1]/10000, pair[0]/10000), self.magvar/2)
-                # Convert font coordinates to lat/lon
-                # Font points are scaled to 1000 height, divide by this to make them 1 degree lat tall
-                # Then multiply by height/60 to set height in Nm
-                newcoords = (coords[0]+pair[1]*scale/60000, coords[1]+pair[0]*scale/60000)
-                # Get distance from origin to this point
-                dist = cosinedist(coords, newcoords)
-                #print(pair[1]/pair[0])
-                #brg = math.pi/2 - math.atan(pair[1]/pair[0]) - math.radians(self.magvar)
-                # Get bearing from origin to this point
-                # Correct this for magnetic variation
-                brg = math.radians(coordbrng(coords, newcoords) - vector)
-                # Project the new point accounting for the magnetic variation
-                lat, lon = coordbrgdist(coords, brg, dist)
-                #print(coords)
-                #print(dist)
-                #print(math.degrees(brg))
-                #print(lat)
-                #print(lon)
-                #lat = coords[0]+latp
-                #lon = coords[1]+lonp
-                # Track the width of the character
-                if lon > maxlen:
-                    maxlen = lon
-                if lon < minlen:
-                    minlen = lon
-                # Convert this coordinate for printing
-                thiscoord = ddtodms(lat, lon)
-                if lastcoord:
-                    line = " %s %s %s" % (lastcoord, thiscoord, color)
-                    # print(line)
-                    yield line
-                lastcoord = thiscoord
+            for end in outline.contours:
+                lastcoord = ""
+                path = outline.points[start:end+1]
+                if outline.tags[end] == 0:
+                    path.append(outline.points[0])
+                #path.append(path[0])
+                for pair in path:
+                    #latp, lonp = self.rotatepoint((pair[1]/10000, pair[0]/10000), self.magvar/2)
+                    # Convert font coordinates to lat/lon
+                    # Font points are scaled to 1000 height, divide by this to make them 1 degree lat tall
+                    # Then multiply by height/60 to set height in Nm
+                    newcoords = (coords[0]+pair[1]*scale/60000, coords[1]+pair[0]*scale/60000)
+                    # Get distance from origin to this point
+                    dist = cosinedist(coords, newcoords)
+                    #print(pair[1]/pair[0])
+                    #brg = math.pi/2 - math.atan(pair[1]/pair[0]) - math.radians(self.magvar)
+                    # Get bearing from origin to this point
+                    # Correct this for magnetic variation
+                    brg = math.radians(coordbrng(coords, newcoords) - vector)
+                    # Project the new point accounting for the magnetic variation
+                    lat, lon = coordbrgdist(coords, brg, dist)
+                    #print(coords)
+                    #print(dist)
+                    #print(math.degrees(brg))
+                    #print(lat)
+                    #print(lon)
+                    #lat = coords[0]+latp
+                    #lon = coords[1]+lonp
+                    # Track the width of the character
+                    if lon > maxlen:
+                        maxlen = lon
+                    if lon < minlen:
+                        minlen = lon
+                    # Convert this coordinate for printing
+                    thiscoord = ddtodms(lat, lon)
+                    if lastcoord:
+                        line = " %s %s %s" % (lastcoord, thiscoord, color)
+                        # print(line)
+                        yield line
+                    lastcoord = thiscoord
+                start = end+1
             #latp, lonp = self.rotatepoint((0,1.1*(maxlen-minlen)), self.magvar/2)
             # Project origin for next character
             dist = cosinedist(coords, (coords[0], coords[1]+1.1*(maxlen-minlen)))
