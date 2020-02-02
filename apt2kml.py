@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-# Converts an APD to a KML file
-# Grabs lines/labels near airport from sectorfile
+# Converts a TowerTrainer .apt file to a KML file
 # Output file will have same name, as kml file
 
 import re
@@ -12,7 +11,7 @@ import vrccolors
 import xml.etree.ElementTree as ET
 import xml.dom.minidom
 
-class sct2apd:
+class ttapt:
 
     def __init__(self, name):
         # Each color will have a list of coordinate lists (lines)
@@ -35,7 +34,7 @@ class sct2apd:
             self.labelcolors[color].append((coords, name))
         else:
             self.labelcolors[color] = [(coords, name)]
-            
+
     def htmlcolortokml(self, color):
         # Get the color in KML format
         if color in vrccolors.defaultcolors:
@@ -53,7 +52,7 @@ class sct2apd:
         colorsplit.reverse()
         # Join back together and return KML color
         return ''.join(colorsplit)
-        
+
     def newsubfol(self, parent, name, open=0):
         # Add subfolder to XML parent
         newfol = ET.SubElement(parent, 'Folder')
@@ -107,7 +106,8 @@ class sct2apd:
         styleid = "s_" + color
         styleidhl = styleid + "_hl"
         pushurl = "http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png"
-        colorhex = self.htmlcolortokml(color)
+        #colorhex = self.htmlcolortokml(color)
+        colorhex = "ffffffff"
 
         sroot = ET.Element('root')
         smap = ET.SubElement(sroot, 'StyleMap', id=mapid)
@@ -116,7 +116,7 @@ class sct2apd:
         sroot.extend(self.style(styleidhl, "1.3", colorhex))
         sroot.extend(self.style(styleid, "1.1", colorhex))
         return sroot
-    
+
     def newpmark(self, parent, color, name="Untitled Path"):
         # Create a new placemark under parent
         pmark = ET.SubElement(parent, 'Placemark')
@@ -139,6 +139,7 @@ class sct2apd:
 
     def makelabel(self, label, color):
         # Create a new label item
+        # print("Making label item :"+str(label))
         sroot = ET.Element('root')
         pmark = self.newpmark(sroot, color, label[1])
         point = ET.SubElement(pmark, 'Point')
@@ -179,75 +180,141 @@ class sct2apd:
             csub = self.newsubfol(aptfol, color)
             for label in labels:
                 csub.extend(self.makelabel(label, color))
-        
+
         # Make it pretty and write the file
         dom = xml.dom.minidom.parseString(ET.tostring(kroot))
         pretty_xml_as_string = dom.toprettyxml(indent="    ")
         with open(file, 'w') as kfile:
             kfile.write(pretty_xml_as_string)
 
-def findlines(masterdir, apt):
-    masterdir = Path(masterdir)
-    kmlfn = apt + ".kml"
+def findlines(filename):
+    # masterdir = Path(masterdir)
+    name = ""
+    type = ""
+    defs = 1
+    defdict = {}
+    cdict = {}
+    cdict['PARKING'] = {}
+    cdict['RUNWAY'] = {}
+    cdict['TAXIWAY'] = {}
+    cdict['HOLD'] = {}
+
+    with open(filename, "r") as aptfile:
+        for line in aptfile:
+            line = line.strip()
+            if line:
+                if defs:
+                    definition = line.split("=")
+                    if len(definition) > 1:
+                        defdict[definition[0]] = definition[1]
+                if name:
+                    # Under a header, save the coordinates to this name
+                    if type != "RUNWAY":
+                        thesecoords = tuple([float(i) for i in line.split(' ')])
+                        cdict[type][name].append(thesecoords)
+                    else:
+                        definition = line.split("=")
+                        if len(definition) > 1:
+                            cdict[type][name]['defs'][definition[0]] = definition[1]
+                        else:
+                            thesecoords = tuple([float(i) for i in line.split(' ')])
+                            cdict[type][name]['lines'].append(thesecoords)
+                for key in cdict:
+                    if line[:len(key)+2] == "["+key+" ":
+                        #print("Found key:"+line)
+                        name = line[len(key)+2:-1]
+                        type = key
+                        if key != "RUNWAY":
+                            cdict[type][name] = []
+                        else:
+                            cdict[type][name] = {'defs': {}, 'lines': []}
+                        break
+            else:
+                name = ""
+                type = ""
+    #print(cdict['HOLD'])
+
+    apt = ttapt(defdict['icao'])
+
+    lbltypes = ['PARKING', 'HOLD']
+    linetypes = ['RUNWAY', 'TAXIWAY']
+    for t in lbltypes:
+        for name, loc in cdict[t].items():
+            #print("Would write lbl for "+name)
+            apt.addlabel(name, loc[0], t)
+    for l in linetypes:
+        for name, path in cdict[l].items():
+            if l != "RUNWAY":
+                #print("Adding non-runway line: "+str(path))
+                apt.addline(path, l)
+            else:
+                apt.addline(path['lines'], l)
+
+    masterdir = Path(filename).parent.absolute()
+    kmlfn = defdict['icao'] + ".kml"
     kmlfile = masterdir / kmlfn
-    airac = "1903"
-    # For remembering last coord to connect lines
-    lastcoord = ""
-    lastcolor = ""
-    # For storing a new line of coordinates
-    thislist = []
-    # Read the ZSE file since it should have everything
-    print("Building sector file object...")
-    sectorobj = sectorfile.sectorfileobj("ZSE-v3_05", masterdir, airac)
-    # Get the coordinates for the airport in question
-    aptloc = sectorobj.airportcoords[apt]
-    # Create an object to convert and store KML
-    apd = sct2apd(apt)
-    # Go through the SID section looking for layout lines
-    print("Searching sid section for lines near "+apt+"...")
-    for line in sectorobj.sections['sid']:
-        # See if line looks like a valid line
-        if re.search(r'^[ \t]+N\d{3}', line) is not None:
-            # Split it up to read the elements
-            elems = [i for i in line.split(';')[0].split(' ') if i != '']
-            if len(elems) > 4:
-                # print(elems)
-                # Get decimal degrees of coordinates
-                coord1 = sectorfile.dmstodd((elems[0], elems[1]))
-                coord2 = sectorfile.dmstodd((elems[2], elems[3]))
-                color = elems[4]
-                # See if it's a continuation of last line
-                if coord1 == lastcoord and color == lastcolor:
-                    thislist.append(coord2)
-                # Test for the initial line, create a new list
-                elif lastcoord == "" and lastcolor == "":
-                    thislist = [coord1, coord2]
-                else:
-                    # Last line finished, see if it ended near airport
-                    if sectorfile.cosinedist(lastcoord, aptloc) < 3:
-                        apd.addline(thislist, lastcolor)
-                    # Start a new list with these coordinates
-                    thislist = [coord1, coord2]
-                # Remeber second coordinates/color for next time
-                lastcoord = coord2
-                lastcolor = color
-    print("Searching labels section for items near "+apt+"...")
-    for line in sectorobj.sections['labels']:
-        if re.search('^".+" +[NS]', line) is not None:
-            lblpre = [i for i in line.split('"') if i]
-            postelems = [i for i in lblpre[1].split(';')[0].strip().split(' ') if i]
-            # print(lblpre)
-            # print(postelems)
-            lblelems = ['"'+lblpre[0]+'"']
-            lblelems.extend(postelems)
-            if len(lblelems) > 3:
-                lblcoords = sectorfile.dmstodd((lblelems[1], lblelems[2]))
-                if sectorfile.cosinedist(lblcoords, aptloc) < 3:
-                    apd.addlabel(lblelems[0].split('"')[1], lblcoords, lblelems[3])
-    print("Writing to KML file...")
-    apd.writekml(kmlfile)
+    apt.writekml(kmlfile)
+
+    # kmlfn = apt + ".kml"
+    # kmlfile = masterdir / kmlfn
+    # airac = "1903"
+    # # For remembering last coord to connect lines
+    # lastcoord = ""
+    # lastcolor = ""
+    # # For storing a new line of coordinates
+    # thislist = []
+    # # Read the ZSE file since it should have everything
+    # print("Building sector file object...")
+    # sectorobj = sectorfile.sectorfileobj("ZSE-v3_05", masterdir, airac)
+    # # Get the coordinates for the airport in question
+    # aptloc = sectorobj.airportcoords[apt]
+    # # Create an object to convert and store KML
+    # apd = sct2apd(apt)
+    # # Go through the SID section looking for layout lines
+    # print("Searching sid section for lines near "+apt+"...")
+    # for line in sectorobj.sections['sid']:
+    #     # See if line looks like a valid line
+    #     if re.search(r'^[ \t]+N\d{3}', line) is not None:
+    #         # Split it up to read the elements
+    #         elems = [i for i in line.split(';')[0].split(' ') if i != '']
+    #         if len(elems) > 4:
+    #             # print(elems)
+    #             # Get decimal degrees of coordinates
+    #             coord1 = sectorfile.dmstodd((elems[0], elems[1]))
+    #             coord2 = sectorfile.dmstodd((elems[2], elems[3]))
+    #             color = elems[4]
+    #             # See if it's a continuation of last line
+    #             if coord1 == lastcoord and color == lastcolor:
+    #                 thislist.append(coord2)
+    #             # Test for the initial line, create a new list
+    #             elif lastcoord == "" and lastcolor == "":
+    #                 thislist = [coord1, coord2]
+    #             else:
+    #                 # Last line finished, see if it ended near airport
+    #                 if sectorfile.cosinedist(lastcoord, aptloc) < 3:
+    #                     apd.addline(thislist, lastcolor)
+    #                 # Start a new list with these coordinates
+    #                 thislist = [coord1, coord2]
+    #             # Remeber second coordinates/color for next time
+    #             lastcoord = coord2
+    #             lastcolor = color
+    # print("Searching labels section for items near "+apt+"...")
+    # for line in sectorobj.sections['labels']:
+    #     if re.search('^".+" +[NS]', line) is not None:
+    #         lblpre = [i for i in line.split('"') if i]
+    #         postelems = [i for i in lblpre[1].split(';')[0].strip().split(' ') if i]
+    #         # print(lblpre)
+    #         # print(postelems)
+    #         lblelems = ['"'+lblpre[0]+'"']
+    #         lblelems.extend(postelems)
+    #         if len(lblelems) > 3:
+    #             lblcoords = sectorfile.dmstodd((lblelems[1], lblelems[2]))
+    #             if sectorfile.cosinedist(lblcoords, aptloc) < 3:
+    #                 apd.addlabel(lblelems[0].split('"')[1], lblcoords, lblelems[3])
+    # print("Writing to KML file...")
+    # apd.writekml(kmlfile)
 
 
-apt = sys.argv[2]
-masterdir = Path(sys.argv[1])
-findlines(masterdir, apt)
+# filename = sys.argv[2]
+filename = Path(sys.argv[1])
+findlines(filename)
