@@ -10,19 +10,20 @@ from pathlib import Path
 # Input file to be sectorile_airac.sct2
 # Output file to be sectorfile_airacrX.sct2
 sectorfiles = [
-    "BLI_TWR_V1",
-    "EUG_APP_PRO_V1",
-    "GEG_APP_PRO_V1",
-    "LMT_APP_PRO_V1",
-    "MFR_APP_PRO_V1_1",
-    "MWH_APP_PRO_V1",
-    "NUW_APP_PRO_V1",
-    "OTH_TWR_V1",
-    "P80_TRACON_PRO_V1_2",
-    "PSC_APP_PRO_V1",
-    "S46-PRO-v2_2",
-    "YKM_APP_PRO_V1_1",
-    "ZSE-v3_05"
+    "BLI_TWR_V1_1903r2.2",
+    "EUG_APP_PRO_V1_1903r2.2",
+    "GEG_APP_PRO_V1_1903r2.2",
+    "KSEA ASDE-X v1.1",
+    "LMT_APP_PRO_V1_1903r2.2",
+    "MFR_APP_PRO_V1_1_1903r2.2",
+    "MWH_APP_PRO_V1_1903r2.2",
+    "NUW_APP_PRO_V1_1903r2.2",
+    "OTH_TWR_V1_1903r2.2",
+    "P80_TRACON_PRO_V1_2_1903r2.2",
+    "PSC_APP_PRO_V1_1903r2.2",
+    "S46-PRO-v2_2_1903r2.2",
+    "YKM_APP_PRO_V1_1_1903r2.2",
+    "ZSE-v3_05_1903r2.2"
 ]
 
 # Location of the diagram kmz
